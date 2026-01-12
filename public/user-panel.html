@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>ElectroStore Developer Console</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@2.5.0/fonts/remixicon.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+
+    <style>
+        .tab-btn { 
+            padding: 6px 12px; 
+            font-size: 12px; 
+            border-radius: 20px; 
+            border: 1px solid var(--glass-border); 
+            background: rgba(255,255,255,0.05); 
+            color: var(--text-muted); 
+            cursor: pointer;
+        }
+        .tab-btn.active { 
+            background: var(--primary-gradient); 
+            color: white; 
+            border: none; 
+        }
+    </style>
+</head>
+<body>
+
+<div class="dashboard-layout">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+        <div class="brand-logo">
+            <i class="ri-shopping-bag-3-line"></i>
+            ElectroStore API
+        </div>
+
+        <div class="nav-item active">
+            <i class="ri-key-2-line"></i> API Keys
+        </div>
+
+        <div class="nav-item" onclick="alert('Coming Soon')">
+            <i class="ri-file-list-3-line"></i> API Documentation
+        </div>
+
+        <div style="margin-top:auto;">
+            <div class="glass-card" style="padding:15px; margin-bottom:10px;">
+                <small style="color:var(--text-muted);">Logged in as</small><br>
+                <b id="usernameDisplay">...</b>
+            </div>
+            <button onclick="logout()" class="btn btn-danger" style="width:100%;">
+                <i class="ri-logout-box-line"></i> Logout
+            </button>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="main-content">
+
+        <div class="header-dash">
+            <div>
+                <h2>ElectroStore API Management</h2>
+                <p style="color:var(--text-muted);">
+                    Kelola API Key dan lakukan pengujian endpoint data produk ElectroStore.
+                </p>
+            </div>
+
+            <button class="btn btn-primary" onclick="createKey()">
+                <i class="ri-add-circle-line"></i> Generate API Key
+            </button>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1.5fr; gap:30px;">
+
+            <!-- API KEYS -->
+            <div>
+                <h4 style="margin-bottom:15px; color:var(--accent-color);">
+                    Active API Keys
+                </h4>
+
+                <div id="keyList" style="display:flex; flex-direction:column; gap:15px;">
+                    <div class="glass-card">Loading...</div>
+                </div>
+            </div>
+
+            <!-- PLAYGROUND -->
+            <div class="glass-card">
+                <h3 style="border-bottom:1px solid var(--glass-border); padding-bottom:15px; margin-bottom:20px;">
+                    <i class="ri-terminal-box-line"></i> ElectroStore API Playground
+                </h3>
+
+                <div style="display:grid; gap:15px;">
+                    <div>
+                        <label style="font-size:12px; color:var(--text-muted);">1. API Key</label>
+                        <select id="selectKey"><option>Loading...</option></select>
+                    </div>
+
+                    <div>
+                        <label style="font-size:12px; color:var(--text-muted);">2. Endpoint</label>
+                        <select id="selectEndpoint" onchange="updateInputBox()">
+                            <option value="/api/v1/products">
+                                GET /products — Daftar Produk
+                            </option>
+                            <option value="/api/v1/products/search">
+                                GET /products/search — Pencarian Produk
+                            </option>
+                            <option value="/api/v1/products/detail">
+                                GET /products/detail/:id — Detail Produk
+                            </option>
+                        </select>
+                    </div>
+
+                    <div id="paramBox" style="display:none;">
+                        <label style="font-size:12px; color:var(--text-muted);">
+                            3. Parameter (ID / Keyword)
+                        </label>
+                        <input type="text" id="paramInput" placeholder="contoh: laptop / 12">
+                    </div>
+
+                    <button class="btn btn-primary" onclick="sendRequest()">
+                        Send Request <i class="ri-send-plane-fill"></i>
+                    </button>
+                </div>
+
+                <div style="margin-top:25px; display:flex; gap:10px; align-items:center;">
+                    <span style="font-size:12px; color:var(--text-muted);">View Mode:</span>
+                    <button class="tab-btn active" onclick="switchView('auto', this)">✨ Auto</button>
+                    <button class="tab-btn" onclick="switchView('table', this)">📊 Table</button>
+                    <button class="tab-btn" onclick="switchView('json', this)">{ } JSON</button>
+                </div>
+
+                <div id="responseBox"
+                     style="margin-top:10px; background:#000; border-radius:10px; padding:15px;
+                            min-height:200px; font-family:monospace; font-size:13px;
+                            color:#00e676; overflow-x:auto;">
+                    // Response API akan ditampilkan di sini...
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- SCRIPT TIDAK DIUBAH -->
+<script>
+    let currentData = null;
+
+    window.onload = async () => {
+        const auth = await fetch('/auth/me').then(r => r.json());
+        if (!auth.loggedIn) window.location.href = '/index.html';
+        document.getElementById('usernameDisplay').innerText = auth.user.username;
+        loadKeys();
+    };
+
+    async function loadKeys() {
+        const res = await fetch('/api/my-keys');
+        const keys = await res.json();
+        const list = document.getElementById('keyList');
+        const select = document.getElementById('selectKey');
+
+        list.innerHTML = '';
+        select.innerHTML = '<option value="">-- Choose API Key --</option>';
+
+        keys.forEach(k => {
+            list.innerHTML += `
+                <div class="glass-card" style="padding:15px; display:flex; justify-content:space-between;">
+                    <div>
+                        <div style="font-weight:bold;">${k.key_label}</div>
+                        <code>${k.api_key}</code>
+                    </div>
+                    <button class="btn btn-danger" style="padding:8px;" onclick="revokeKey(${k.id})">
+                        <i class="ri-delete-bin-line"></i>
+                    </button>
+                </div>`;
+            select.innerHTML += `<option value="${k.api_key}">${k.key_label}</option>`;
+        });
+    }
+
+    async function createKey() {
+        const label = prompt("Nama Project / Client:");
+        if(!label) return;
+        await fetch('/api/create-key', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({ label })
+        });
+        loadKeys();
+    }
+
+    async function revokeKey(id) {
+        if(confirm('Hapus API Key ini?')) {
+            await fetch(`/api/revoke-key/${id}`, { method:'DELETE' });
+            loadKeys();
+        }
+    }
+
+    function updateInputBox() {
+        const ep = selectEndpoint.value;
+        paramBox.style.display = (ep.includes('search') || ep.includes('detail')) ? 'block' : 'none';
+    }
+
+    async function sendRequest() {
+        const key = selectKey.value;
+        let ep = selectEndpoint.value;
+        const param = paramInput.value;
+
+        if(!key) return alert("Pilih API Key!");
+
+        if(ep.includes('search')) ep += "?q=" + encodeURIComponent(param);
+        else if(ep.includes('detail')) ep += "/" + param;
+
+        responseBox.innerText = "Requesting...";
+        const res = await fetch(ep, { headers:{'x-api-key':key} });
+        currentData = await res.json();
+        renderAuto();
+    }
+
+    function switchView(mode, btn) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        if(btn) btn.classList.add('active');
+        if(!currentData) return;
+        mode === 'json' ? renderJSON() : renderTable();
+    }
+
+    function renderJSON() {
+        responseBox.innerText = JSON.stringify(currentData, null, 2);
+    }
+
+    function renderTable() {
+        let data = currentData.data || currentData;
+        if(!Array.isArray(data)) data = [data];
+        let h = Object.keys(data[0]);
+        let html = '<table><tr>' + h.map(x=>`<th>${x}</th>`).join('') + '</tr>';
+        data.forEach(r=>{
+            html += '<tr>' + h.map(x=>`<td>${r[x]}</td>`).join('') + '</tr>';
+        });
+        html += '</table>';
+        responseBox.innerHTML = html;
+    }
+
+    function renderAuto(){ renderTable(); }
+    function logout(){ fetch('/auth/logout').then(()=>location.href='/index.html'); }
+</script>
+
+</body>
+</html>
